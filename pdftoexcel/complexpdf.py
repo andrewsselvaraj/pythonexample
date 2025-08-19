@@ -6,7 +6,8 @@ def pdf_to_excel(pdf_path, excel_path):
     all_tables = []
     
     with pdfplumber.open(pdf_path) as pdf:
-        for page_num, page in enumerate(pdf.pages, start=1):
+        for page_num, page in enumerate(pdf.pages, start=2):
+            print(f"⚠️ PATH {pdf_path}, skipping...")
             table = page.extract_table()
             
             if table:  # ✅ Only process if a table exists
@@ -24,8 +25,8 @@ def pdf_to_excel(pdf_path, excel_path):
         print("❌ No tables found in the entire PDF.")
 
 # Example usage
-pdf_folder = r"D:\andrew\python\pythonexample\pdftoexcel\research\t4"
-excel_output = r"D:\andrew\python\pythonexample\pdftoexcel\research\output.xlsx"
+pdf_folder = r"D:\andrew\python\pythonexample\pdftoexcel\research\t4\complexpdf"
+excel_output = r"D:\andrew\python\pythonexample\pdftoexcel\research\t4\complexpdf\output.xlsx"
 
 # Convert all PDFs in folder
 for file in os.listdir(pdf_folder):
