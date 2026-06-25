@@ -78,17 +78,17 @@ RE_AGE      = re.compile(r'வயது[‌\s]*[:\./][‌\s]*(\d+)')
 RE_SEX      = re.compile(r'பாலினம்[‌\s]*[:\./][‌\s]*(ஆண்|பெண்|மூன்றாம்)', re.UNICODE)
 
 # Page header patterns
-RE_PARTNO   = re.compile(r'பாகம்[‌\s]*எண்[‌\s]*[:\./][‌\s]*(\d+)')
-RE_SECTION  = re.compile(r'பிரிவு[‌\s]*எண்[‌\s]*மற்றும்[‌\s]*பெயர்[‌\s]*[:\./]?[‌\s]*(.+?)(?:\n|$)')
+RE_PARTNO = re.compile(r'பாகம்[‌\s]*எண்[‌\s]*[:\./]?[‌\s]*(\d+)', re.UNICODE)
+RE_SECTION = re.compile(r'பிரிவு[‌\s]*எண்[‌\s]*மற்றும்[‌\s]*பெயர்[‌\s]*(.+)', re.UNICODE)
 
-# Parliament constituency: நாடாளுமன்றத் தொகுதி : 22-கன்னியாகுமரி
+# Parliament constituency: நாடாளுமன்றத் தொகுதியின் எண் மற்றும் பெயர் : 22-கன்னியாகுமரி
 RE_PARLIAMENT = re.compile(
-    r'நாடாளுமன்ற(?:த்)?[‌\s]*தொகுதி[‌\s]*[:\-/]?[‌\s]*(\d+[‌\s]*[-–][‌\s]*\S+)',
+    r'நாடாளுமன்ற(?:த்)?[‌\s]*(?:தொகுதியின்|தொகுதி)[^\n]*?(\d+[‌\s]*[-–][^\n]*)',
     re.UNICODE
 )
-# Assembly constituency: சட்டமன்றத் தொகுதி : 229-கன்னியாகுமரி
+# Assembly constituency: சட்டமன்றத் தொகுதியின் எண் மற்றும் பெயர் : 229-கன்னியாகுமரி
 RE_ASSEMBLY = re.compile(
-    r'சட்டமன்ற(?:த்)?[‌\s]*தொகுதி[‌\s]*[:\-/]?[‌\s]*(\d+[‌\s]*[-–][‌\s]*\S+)',
+    r'சட்டமன்ற(?:த்)?[‌\s]*(?:தொகுதியின்|தொகுதி)[^\n]*?(\d+[‌\s]*[-–][^\n]*)',
     re.UNICODE
 )
 
@@ -137,6 +137,32 @@ def split_image_into_columns(img, num_cols=3):
 
 # ── Parsing helpers ──────────────────────────────────────────────────────────
 
+def normalize_header_value(value):
+    """Normalize OCR header values so they are readable and Tableau-friendly."""
+    if not value:
+        return ''
+    cleaned = re.sub(r'\s+', ' ', value).strip()
+    cleaned = cleaned.replace('‌', '').replace(',', '-')
+    cleaned = re.sub(r'^[\s:./\-]+', '', cleaned)
+    cleaned = re.sub(r'[\s:./\-]+$', '', cleaned)
+    return cleaned
+
+
+def extract_header_value(text, regex):
+    """Extract a value from the page header using a regex applied line-by-line."""
+    for line in text.splitlines():
+        cleaned = re.sub(r'\s+', ' ', line).strip()
+        if not cleaned:
+            continue
+        m = regex.search(cleaned)
+        if m:
+            return normalize_header_value(m.group(1))
+    m = regex.search(text)
+    if m:
+        return normalize_header_value(m.group(1))
+    return ''
+
+
 def parse_page_header(text):
     """
     Extract part no, section name, parliament constituency, and assembly
@@ -148,21 +174,15 @@ def parse_page_header(text):
     parliament = ''
     assembly   = ''
 
-    m = RE_PARTNO.search(text)
-    if m:
-        part_no = m.group(1)
+    part_no = extract_header_value(text, RE_PARTNO)
+    section = normalize_header_value(extract_header_value(text, RE_SECTION))
+    parliament = extract_header_value(text, RE_PARLIAMENT)
+    assembly = extract_header_value(text, RE_ASSEMBLY)
 
-    m = RE_SECTION.search(text)
-    if m:
-        section = m.group(1).strip()
-
-    m = RE_PARLIAMENT.search(text)
-    if m:
-        parliament = m.group(1).strip().replace('‌', '')
-
-    m = RE_ASSEMBLY.search(text)
-    if m:
-        assembly = m.group(1).strip().replace('‌', '')
+    if not parliament:
+        parliament = infer_constituencies_from_path(PDF_FILE)[0]
+    if not assembly:
+        assembly = infer_constituencies_from_path(PDF_FILE)[1]
 
     return part_no, section, parliament, assembly
 
@@ -286,7 +306,7 @@ def main():
     current_part       = ''
     current_section    = ''
 
-    for page_num in range(total_pages):
+    for page_num in range(3, total_pages):
         print(f"Processing page {page_num + 1}/{total_pages}...", end=' ', flush=True)
         page = doc[page_num]
         img  = render_page(page)
@@ -366,16 +386,6 @@ def main():
     hdr_font = Font(bold=True, color="FFFFFF", size=10)
     alt_fill = PatternFill(start_color="EBF3FF", end_color="EBF3FF", fill_type="solid")
 
-    # Title row
-    last_col_letter = chr(64 + len(fieldnames))
-    ws.merge_cells(f'A1:{last_col_letter}1')
-    title_cell = ws['A1']
-    title_cell.value     = "Electoral Roll 2026 – Parliament: 22 Kanyakumari | Assembly: 229 Kanyakumari"
-    title_cell.font      = Font(bold=True, size=11, color="FFFFFF")
-    title_cell.fill      = hdr_fill
-    title_cell.alignment = center
-    ws.row_dimensions[1].height = 22
-
     # Column widths (one entry per field)
     col_widths = {
         'Serial No':               8,
@@ -397,15 +407,15 @@ def main():
                        'Section', 'Name', 'Relation Name'}
 
     for col_i, field in enumerate(fieldnames, start=1):
-        cell = ws.cell(row=2, column=col_i, value=field)
+        cell = ws.cell(row=1, column=col_i, value=field)
         cell.font      = hdr_font
         cell.fill      = hdr_fill
         cell.alignment = center
         cell.border    = thin
         ws.column_dimensions[cell.column_letter].width = col_widths.get(field, 12)
-    ws.row_dimensions[2].height = 30
+    ws.row_dimensions[1].height = 30
 
-    for row_i, voter in enumerate(all_voters, start=3):
+    for row_i, voter in enumerate(all_voters, start=2):
         fill = alt_fill if row_i % 2 == 0 else None
         for col_i, field in enumerate(fieldnames, start=1):
             cell = ws.cell(row=row_i, column=col_i, value=voter.get(field, ''))
