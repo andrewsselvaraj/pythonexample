@@ -1,0 +1,37 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "run extractor",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"extract_voters_v2.py"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "inspect output csv",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-c",
+				"import csv; path=r'd:\\andrew\\python\\pythonexample\\extractvoters\\voters_2026.csv'; rows=list(csv.DictReader(open(path, encoding='utf-8-sig'))); print('rows', len(rows)); print(rows[0]['Assembly Constituency']); print(rows[1]['Assembly Constituency'])"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "inspect output csv",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-c",
+				"import csv; path=r'''d:\\andrew\\python\\pythonexample\\extractvoters\\voters_2026.csv'''; rows=list(csv.DictReader(open(path, encoding='utf-8-sig'))); print('rows', len(rows)); print(rows[0]['Assembly Constituency']); print(rows[1]['Assembly Constituency'])"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
